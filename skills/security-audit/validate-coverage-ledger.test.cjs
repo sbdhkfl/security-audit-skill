@@ -439,6 +439,63 @@ test("preserves candidate provenance when reassignment must be deferred", () => 
   assert.deepEqual(errorsFor([deferred]), []);
 });
 
+test("rejects archived verifier ownership reused by later attempts and live checks", () => {
+  const archived = archivedAttempt({
+    local_checks: [sourceCheck("verifier-1")],
+  });
+
+  const reusedByLaterAttempt = unit({
+    attempts: [
+      archived,
+      archivedAttempt({
+        wave: 2,
+        agent_id: "hunter-2",
+        local_checks: [sourceCheck("hunter-2")],
+      }),
+      archivedAttempt({
+        wave: 3,
+        agent_id: "verifier-1",
+        local_checks: [sourceCheck("hunter-3")],
+      }),
+    ],
+    wave: 4,
+    status: "in_progress",
+    agent_id: "hunter-4",
+  });
+  assert(errorsFor([reusedByLaterAttempt]).some((error) =>
+    error.includes("prior verifier owner evidence must remain in its earlier attempt"),
+  ));
+
+  const reusedByLaterCheck = unit({
+    attempts: [
+      archived,
+      archivedAttempt({
+        wave: 2,
+        agent_id: "hunter-2",
+        local_checks: [sourceCheck("verifier-1")],
+      }),
+    ],
+    wave: 3,
+    status: "in_progress",
+    agent_id: "hunter-3",
+  });
+  assert(errorsFor([reusedByLaterCheck]).some((error) =>
+    error.includes("prior verifier owner evidence must remain in its earlier attempt"),
+  ));
+
+  const reusedByLiveCheck = unit({
+    attempts: [archived],
+    wave: 2,
+    status: "covered",
+    agent_id: "hunter-2",
+    reviewed_paths: ["src/router.ts"],
+    local_checks: [sourceCheck("verifier-1")],
+  });
+  assert(errorsFor([reusedByLiveCheck]).some((error) =>
+    error.includes("prior verifier owner evidence must remain in its archived attempt"),
+  ));
+});
+
 test("rejects reassignment owner reuse and evidence mixing", () => {
   const reusedOwner = unit({
     attempts: [archivedAttempt()],
