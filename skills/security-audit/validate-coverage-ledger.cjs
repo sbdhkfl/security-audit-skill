@@ -573,6 +573,7 @@ function validateAttempts(value, unit, base, errors) {
   if (value.length > MAX_LIST_ITEMS) errors.push(`${base}.attempts: exceeds ${MAX_LIST_ITEMS} entries`);
 
   const priorOwners = new Set();
+  const priorCheckOwners = new Set();
   const priorArtifacts = new Set();
   let previousWave = 0;
   value.slice(0, MAX_LIST_ITEMS).forEach((attempt, index) => {
@@ -599,7 +600,7 @@ function validateAttempts(value, unit, base, errors) {
     let hasFreshOwner = false;
     if (!isSafeAgentId(attempt.agent_id)) {
       errors.push(`${attemptBase}.agent_id: archived attempt requires a canonical lowercase agent ID`);
-    } else if (priorOwners.has(attempt.agent_id)) {
+    } else if (priorOwners.has(attempt.agent_id) || priorCheckOwners.has(attempt.agent_id)) {
       errors.push(`${attemptBase}.agent_id: assignment owner must be fresh for each attempt`);
     } else {
       hasFreshOwner = true;
@@ -615,9 +616,10 @@ function validateAttempts(value, unit, base, errors) {
     if (Array.isArray(attempt.local_checks)) {
       attempt.local_checks.forEach((check, checkIndex) => {
         if (!isObject(check)) return;
-        if (priorOwners.has(check.agent_id)) {
+        if (priorOwners.has(check.agent_id) || priorCheckOwners.has(check.agent_id)) {
           errors.push(`${attemptBase}.local_checks[${checkIndex}].agent_id: prior assignment owner evidence must remain in its earlier attempt`);
         }
+        if (isSafeAgentId(check.agent_id)) priorCheckOwners.add(check.agent_id);
         if (typeof check.artifact === "string" && priorArtifacts.has(check.artifact)) {
           errors.push(`${attemptBase}.local_checks[${checkIndex}].artifact: artifact from an earlier attempt cannot be reused`);
         }
@@ -627,13 +629,13 @@ function validateAttempts(value, unit, base, errors) {
     if (hasFreshOwner) priorOwners.add(attempt.agent_id);
   });
 
-  if (isSafeAgentId(unit.agent_id) && priorOwners.has(unit.agent_id)) {
+  if (isSafeAgentId(unit.agent_id) && (priorOwners.has(unit.agent_id) || priorCheckOwners.has(unit.agent_id))) {
     errors.push(`${base}.agent_id: current assignment owner must be fresh after reassignment`);
   }
   if (Array.isArray(unit.local_checks)) {
     unit.local_checks.forEach((check, index) => {
       if (!isObject(check)) return;
-      if (priorOwners.has(check.agent_id)) {
+      if (priorOwners.has(check.agent_id) || priorCheckOwners.has(check.agent_id)) {
         errors.push(`${base}.local_checks[${index}].agent_id: prior assignment owner evidence must remain in its archived attempt`);
       }
       if (typeof check.artifact === "string" && priorArtifacts.has(check.artifact)) {
