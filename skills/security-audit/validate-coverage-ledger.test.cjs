@@ -490,6 +490,48 @@ test("rejects reassignment owner reuse and evidence mixing", () => {
   assert(errorsFor([unordered]).some((error) => error.includes("strictly increasing")));
 });
 
+test("rejects reuse of archived verifier owners", () => {
+  const archivedVerifier = archivedAttempt({
+    local_checks: [sourceCheck("reviewer-1")],
+  });
+
+  const reusedAsAttemptOwner = unit({
+    attempts: [
+      archivedVerifier,
+      archivedAttempt({
+        wave: 2,
+        agent_id: "reviewer-1",
+        local_checks: [sourceCheck("reviewer-1")],
+      }),
+    ],
+    wave: 3,
+    status: "in_progress",
+    agent_id: "hunter-3",
+  });
+  assert(errorsFor([reusedAsAttemptOwner]).some((error) =>
+    error.includes("assignment owner must be fresh for each attempt")));
+
+  const reusedAsLiveCheck = unit({
+    attempts: [archivedVerifier],
+    wave: 2,
+    status: "covered",
+    agent_id: "hunter-2",
+    reviewed_paths: ["src/authz.ts"],
+    local_checks: [sourceCheck("reviewer-1", { reviewed_paths: ["src/authz.ts"] })],
+  });
+  assert(errorsFor([reusedAsLiveCheck]).some((error) =>
+    error.includes("prior assignment owner evidence must remain in its archived attempt")));
+
+  const reusedAsCurrentOwner = unit({
+    attempts: [archivedVerifier],
+    wave: 2,
+    status: "in_progress",
+    agent_id: "reviewer-1",
+  });
+  assert(errorsFor([reusedAsCurrentOwner]).some((error) =>
+    error.includes("current assignment owner must be fresh after reassignment")));
+});
+
 test("rejects unsafe paths and malformed fingerprints", () => {
   for (const value of [
     "/etc/passwd",
